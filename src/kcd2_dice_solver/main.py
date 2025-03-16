@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-import random
-from collections import Counter
 import itertools
 import math
-from typing import Any, Dict, List, Tuple, Optional
+from collections import Counter
+from typing import Any, Dict, List, Optional, Tuple
 
 # -------------------------------
 # Scoring rules:
@@ -13,12 +12,15 @@ from typing import Any, Dict, List, Tuple, Optional
 #   - Straights: 1-2-3-4-5 = 500; 2-3-4-5-6 = 750; 1-2-3-4-5-6 = 1500.
 # -------------------------------
 
+
 def score_trip(count: int, num: int) -> int:
     """Return score for k-of-a-kind for a given face, where k >= 3."""
     base = 1000 if num == 1 else num * 100
     return base * (2 ** (count - 3))
 
+
 # --- Exhaustive hold scoring functions ---
+
 
 def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
     """
@@ -42,18 +44,19 @@ def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
                 groups.append((group, score_val))
     # Straights (only valid if exactly the required dice are used)
     # Check for 1-2-3-4-5-6
-    if all(cnt.get(i, 0) >= 1 for i in range(1,7)):
-        group = Counter({i:1 for i in range(1,7)})
+    if all(cnt.get(i, 0) >= 1 for i in range(1, 7)):
+        group = Counter({i: 1 for i in range(1, 7)})
         groups.append((group, 1500))
     # Check for 1-2-3-4-5 (only if available)
-    if all(cnt.get(i, 0) >= 1 for i in range(1,6)):
-        group = Counter({i:1 for i in range(1,6)})
+    if all(cnt.get(i, 0) >= 1 for i in range(1, 6)):
+        group = Counter({i: 1 for i in range(1, 6)})
         groups.append((group, 500))
     # Check for 2-3-4-5-6
-    if all(cnt.get(i, 0) >= 1 for i in range(2,7)):
-        group = Counter({i:1 for i in range(2,7)})
+    if all(cnt.get(i, 0) >= 1 for i in range(2, 7)):
+        group = Counter({i: 1 for i in range(2, 7)})
         groups.append((group, 750))
     return groups
+
 
 def best_score_from_counter(cnt: Counter) -> Optional[int]:
     """
@@ -81,6 +84,7 @@ def best_score_from_counter(cnt: Counter) -> Optional[int]:
                     found = True
     return best if found else None
 
+
 def score_hold(hold: List[int]) -> Optional[int]:
     """
     Given a hold (list of dice), return the maximum score obtainable if the hold is entirely scoring.
@@ -88,6 +92,7 @@ def score_hold(hold: List[int]) -> Optional[int]:
     """
     cnt = Counter(hold)
     return best_score_from_counter(cnt)
+
 
 def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     """
@@ -97,7 +102,7 @@ def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     """
     n = len(roll)
     holds_dict: Dict[Tuple[int, ...], int] = {}
-    for r in range(1, n+1):
+    for r in range(1, n + 1):
         for indices in itertools.combinations(range(n), r):
             subset = [roll[i] for i in indices]
             sorted_subset = tuple(sorted(subset))
@@ -109,9 +114,11 @@ def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     # Convert to list of (list, score)
     return [(list(k), v) for k, v in holds_dict.items()]
 
+
 # -------------------------------
 # Risk & Probability Functions
 # -------------------------------
+
 
 def outcome_is_scoring(outcome: Tuple[int, ...]) -> bool:
     """
@@ -121,32 +128,37 @@ def outcome_is_scoring(outcome: Tuple[int, ...]) -> bool:
     """
     # A simple check: if any die is 1 or 5, or if there are at least three of any face,
     # or if it qualifies as a straight.
-    if any(d in (1,5) for d in outcome):
+    if any(d in (1, 5) for d in outcome):
         return True
     counts = Counter(outcome)
     if any(cnt >= 3 for cnt in counts.values()):
         return True
     if len(outcome) >= 5:
         s = set(outcome)
-        if set(range(1,6)).issubset(s) or set(range(2,7)).issubset(s):
+        if set(range(1, 6)).issubset(s) or set(range(2, 7)).issubset(s):
             return True
-    if len(outcome) == 6 and set(outcome) == set(range(1,7)):
+    if len(outcome) == 6 and set(outcome) == set(range(1, 7)):
         return True
     return False
+
 
 def compute_bust_probability(n: int) -> float:
     """
     Compute bust probability for n dice by enumerating all outcomes.
     Returns a probability between 0 and 1.
     """
-    total = 6 ** n
-    bust = sum(1 for outcome in itertools.product(range(1,7), repeat=n)
-               if not outcome_is_scoring(outcome))
+    total = 6**n
+    bust = sum(
+        1
+        for outcome in itertools.product(range(1, 7), repeat=n)
+        if not outcome_is_scoring(outcome)
+    )
     return bust / total if total > 0 else 0.0
+
 
 def average_score(n: int) -> float:
     if n == 1:
-        return (1/6)*100 + (1/6)*50  # Exactly 25 points
+        return (1 / 6) * 100 + (1 / 6) * 50  # Exactly 25 points
     # use existing logic for other cases (n > 1)
     total_score = 0
     outcomes = itertools.product(range(1, 7), repeat=n)
@@ -155,12 +167,13 @@ def average_score(n: int) -> float:
         if holds:
             best_score = min(score for _, score in holds)
             total_score += best_score
-    return total_score / (6 ** n)
+    return total_score / (6**n)
 
 
 # -------------------------------
 # Expected Value Function (with risk penalty)
 # -------------------------------
+
 
 def expected_value(
     remaining_dice: int,
@@ -202,14 +215,19 @@ def expected_value(
     return max(current_turn_points, ev_continue)
 
 
-
 # -------------------------------
 # Recommendation Function
 # -------------------------------
 
-def recommend_move(current_roll: List[int], remaining_dice: int,
-                   current_turn_points: int, player_score: int, opponent_score: int,
-                   devil_count: int = 0) -> Dict[str, Any]:
+
+def recommend_move(
+    current_roll: List[int],
+    remaining_dice: int,
+    current_turn_points: int,
+    player_score: int,
+    opponent_score: int,
+    devil_count: int = 0,
+) -> Dict[str, Any]:
     holds = generate_holds(current_roll)
     best_decision = "score and pass"
     best_ev = -math.inf
@@ -221,23 +239,31 @@ def recommend_move(current_roll: List[int], remaining_dice: int,
         if dice_left_after_hold == 0:
             dice_left_after_hold = 6  # hot dice
         bust_prob = compute_bust_probability(dice_left_after_hold)
-        avg_future_score = average_score(dice_left_after_hold)
+        average_score(dice_left_after_hold)
 
         # Explicit simplified EV calculation (no recursion at small dice count)
-        ev_continue = current_turn_points + hold_score + (1 - bust_prob) * average_score(dice_left_after_hold)
+        ev_continue = (
+            current_turn_points
+            + hold_score
+            + (1 - bust_prob) * average_score(dice_left_after_hold)
+        )
         ev_pass = current_turn_points + hold_score
 
         # Explicit small-margin check to avoid risky plays:
         if ev_continue > ev_pass + 50 and bust_prob < 0.5:
             decision = "score and continue"
             ev = ev_continue
-            rationale_tmp = (f"Hold {hold_dice} scoring {hold_score} points; with "
-                             f"{dice_left_after_hold} dice remaining, bust chance is "
-                             f"{bust_prob*100:.1f}%, EV continuing: {ev_continue:.1f} vs banking: {ev_pass}")
+            (
+                f"Hold {hold_dice} scoring {hold_score} points; with "
+                f"{dice_left_after_hold} dice remaining, bust chance is "
+                f"{bust_prob*100:.1f}%, EV continuing: {ev_continue:.1f} vs banking: {ev_pass}"
+            )
         else:
             decision = "score and pass"
             ev = ev_pass
-            rationale_pass = f"Banking {ev_pass} is safer due to high bust chance ({bust_prob:.1%})"
+            rationale_pass = (
+                f"Banking {ev_pass} is safer due to high bust chance ({bust_prob:.1%})"
+            )
 
         if ev > best_ev:
             best_ev = ev
@@ -252,87 +278,135 @@ def recommend_move(current_roll: List[int], remaining_dice: int,
 # Interactive Trainer/Solver
 # -------------------------------
 
+import json
+
+
 def interactive_solver() -> None:
-    try:
-        target_score = int(input("Enter the total score required to win: "))
-    except ValueError:
-        print("Invalid target score.")
-        return
+    target_score = int(input("Enter the total score required to win: "))
     player_total = 0
+    opponent_score = 0
     round_number = 1
-    while player_total < target_score:
+    game_log = []
+
+    while player_total < target_score and opponent_score < target_score:
         print(f"\n--- Round {round_number} ---")
-        try:
-            opponent_score = int(input("Enter opponent's total score: "))
-        except ValueError:
-            print("Invalid input for opponent's score.")
+        opponent_input = input("Enter opponent's total score: ").strip()
+        if not opponent_input.isdigit():
+            print("Invalid opponent's score.")
             continue
+        opponent_score = int(opponent_input)
+
+        # Check game end condition immediately
+        if opponent_score >= target_score:
+            print(f"Opponent reached {opponent_score}. You lose.")
+            break
+        if player_total >= target_score:
+            break
+
         current_turn_points = 0
         remaining_dice = 6
         round_over = False
+
+        # Initialize logging for this round
+        round_log = {
+            "round": round_number,
+            "player_start_total": player_total,
+            "opponent_total": opponent_score,
+            "turns": [],
+        }
+
         while not round_over:
-            dice_input = input(f"Enter dice roll for {remaining_dice} dice (space-separated or type 'bust'): ").strip()
+            dice_input = input(
+                f"Enter dice roll for {remaining_dice} dice (or 'bust'): "
+            ).strip()
             if dice_input.lower() == "bust":
-                print("Input received: bust. Round ended; you lose all turn points.")
+                round_log["turns"].append(
+                    {
+                        "roll": [],
+                        "hold": [],
+                        "hold_score": 0,
+                        "turn_points": 0,
+                        "decision": "bust",
+                    }
+                )
+                print("Bust! Turn points lost.")
                 current_turn_points = 0
                 round_over = True
                 continue
-            try:
-                current_roll = list(map(int, dice_input.split()))
-            except ValueError:
-                print("Invalid dice roll input.")
-                continue
-            devil_count_input = input("Enter number of Devil's Head dice (if any, else 0): ").strip()
-            try:
-                devil_count = int(devil_count_input) if devil_count_input else 0
-            except ValueError:
-                devil_count = 0
-            rec = recommend_move(current_roll, remaining_dice, current_turn_points,
-                                 player_total, opponent_score, devil_count)
-            print("\nSolver Recommendation:")
-            print(f"  Score dice: {rec['hold_dice']}")
-            print(f"  Decision: {rec['decision']}")
-            print(f"  Rationale: {rec['rationale']}")
-            
-            if rec["decision"] == "bust":
-                print("Round busted! You lose all turn points.")
-                current_turn_points = 0
-                round_over = True
-                continue
-            
-            # Find the hold score for the recommended hold.
-            holds_list = generate_holds(current_roll)
-            chosen_hold = rec["hold_dice"]
-            hold_score: Optional[int] = None
-            for hold, score in holds_list:
-                if sorted(hold) == sorted(chosen_hold):
-                    hold_score = score
-                    break
-            if hold_score is None:
-                print("Error: recommended hold not found. Ending round.")
-                round_over = True
-                continue
-            
+
+            current_roll = list(map(int, dice_input.split()))
+            devil_count_input = input(
+                "Enter number of Devil's Head dice (if any, else 0): "
+            ).strip()
+            devil_count = int(devil_count_input) if devil_count_input.isdigit() else 0
+
+            rec = recommend_move(
+                current_roll,
+                remaining_dice,
+                current_turn_points,
+                player_total,
+                opponent_score,
+                devil_count,
+            )
+
+            hold_score = score_hold(rec["hold_dice"]) or 0
             current_turn_points += hold_score
-            remaining_dice -= len(chosen_hold)
-            if remaining_dice <= 0:
-                remaining_dice = 6
-                print("Hot-dice! All dice scored. Re-rolling all 6 dice.")
-            
+            remaining_dice -= len(rec["hold_dice"])
+            if remaining_dice == 0:
+                remaining_dice = 6  # Hot dice rule
+
+            turn_log = {
+                "roll": current_roll,
+                "devil_dice": devil_count,
+                "hold": rec["hold_dice"],
+                "hold_score": hold_score,
+                "turn_points": current_turn_points,
+                "remaining_dice": remaining_dice,
+                "decision": rec["decision"],
+                "rationale": rec["rationale"],
+            }
+            round_log["turns"].append(turn_log)
+
+            print(
+                f"\nSolver recommends: {rec['decision']} with dice {rec['hold_dice']}"
+            )
+            print(f"Rationale: {rec['rationale']}")
+
             if rec["decision"] == "score and pass":
-                print("Decision: Score and pass. Ending round.")
+                print("Passing turn.")
+                round_over = True
+            elif rec["decision"] == "bust":
+                print("Bust! Points lost.")
+                current_turn_points = 0
                 round_over = True
             else:
-                print("Decision: Score and continue. Continue rolling.")
-                print(f"Current turn points: {current_turn_points}, Remaining dice: {remaining_dice}")
-        
+                print(
+                    f"Continuing turn, current points: {current_turn_points}, dice left: {remaining_dice}"
+                )
+
         player_total += current_turn_points
+        round_log["player_end_total"] = player_total
+        game_log.append(round_log)
+
         print(f"Round {round_number} complete. Your total score: {player_total}")
         round_number += 1
-    print("\nCongratulations! You've reached the target score and won!")
+
+        # Game end conditions check
+        if player_total >= target_score:
+            print("Congratulations! You've reached the target score and won!")
+            break
+        elif opponent_score >= target_score:
+            print("Opponent reached target score. You lose.")
+            break
+
+    # Finally print full game log as JSON
+    print("\nGame log (for ML consumption):")
+    print(json.dumps(game_log, indent=2))
+
 
 def main() -> None:
     interactive_solver()
+
 
 if __name__ == "__main__":
     main()
