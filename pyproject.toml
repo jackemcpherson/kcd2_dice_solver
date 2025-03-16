@@ -1,7 +1,13 @@
 [project]
 name = "kcd2-dice-solver"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple solver program for the dice minigame in KCD2"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "shed>=2024.10.1",
+]
