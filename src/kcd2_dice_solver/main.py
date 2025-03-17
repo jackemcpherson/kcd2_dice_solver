@@ -2,7 +2,7 @@
 import itertools
 import math
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 
 # -------------------------------
@@ -46,10 +46,64 @@ config = GameConfig()
 # -------------------------------
 # Scoring Functions
 # -------------------------------
+def is_scoring_combination(dice: Union[List[int], Counter, Tuple[int, ...]]) -> bool:
+    """
+    Determine if a set of dice contains any scoring combination.
+    Works with either a list of dice, a Counter object, or a tuple.
+
+    Returns:
+        bool: True if the dice contain at least one scoring combination
+    """
+    # Convert to Counter if we received a list or tuple
+    if isinstance(dice, (list, tuple)):
+        dice_counter = Counter(dice)
+    else:
+        dice_counter = dice
+
+    # Check for singles (1's and 5's)
+    if dice_counter[1] > 0 or dice_counter[5] > 0:
+        return True
+
+    # Check for three-of-a-kind or more
+    if any(count >= config.min_of_a_kind for face, count in dice_counter.items()):
+        return True
+
+    # Check for straights
+    dice_set = set(dice_counter.keys())
+    if len(dice_set) >= 5:
+        if config.small_straight.issubset(dice_set) or config.large_straight.issubset(
+            dice_set
+        ):
+            return True
+        if len(dice_set) == 6 and dice_set == config.full_straight:
+            return True
+
+    return False
+
+
 def score_trip(count: int, num: int) -> int:
     """Return score for k-of-a-kind for a given face, where k >= 3."""
     base = 1000 if num == 1 else num * 100
     return base * (2 ** (count - 3))
+
+
+def get_straight_score(dice_set: Set[int]) -> Optional[int]:
+    """
+    Check if the set of dice values forms a straight and return its score.
+
+    Args:
+        dice_set: Set of dice face values
+
+    Returns:
+        int: Score for the straight, or None if not a straight
+    """
+    if config.full_straight.issubset(dice_set):
+        return config.full_straight_score
+    elif config.small_straight.issubset(dice_set):
+        return config.small_straight_score
+    elif config.large_straight.issubset(dice_set):
+        return config.large_straight_score
+    return None
 
 
 def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
@@ -76,17 +130,20 @@ def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
                 score_val = score_trip(k, face)
                 groups.append((group, score_val))
 
-    # Check for 1-2-3-4-5-6 (full straight)
+    # Check for straights
+    dice_set = set(cnt.keys())
+
+    # Full straight (1-6)
     if len(cnt) == 6 and all(cnt[i] >= 1 for i in range(1, 7)):
         group = Counter({i: 1 for i in range(1, 7)})
         groups.append((group, config.full_straight_score))
 
-    # Check for 1-2-3-4-5 (small straight)
+    # Small straight (1-5)
     if all(cnt.get(i, 0) >= 1 for i in range(1, 6)):
         group = Counter({i: 1 for i in range(1, 6)})
         groups.append((group, config.small_straight_score))
 
-    # Check for 2-3-4-5-6 (large straight)
+    # Large straight (2-6)
     if all(cnt.get(i, 0) >= 1 for i in range(2, 7)):
         group = Counter({i: 1 for i in range(2, 7)})
         groups.append((group, config.large_straight_score))
@@ -125,16 +182,22 @@ def score_hold(hold: List[int]) -> Optional[int]:
     """
     Given a hold (list of dice), return the maximum score obtainable if the hold is entirely scoring.
     Return None if the hold cannot be partitioned into valid scoring groups.
+
+    This checks first for straight combinations, then falls back to the recursive partitioning algorithm.
     """
+    # If empty hold, return 0 (base case)
+    if not hold:
+        return 0
+
+    # First check if this is a scoring combination at all
+    if not is_scoring_combination(hold):
+        return None
+
     # Special case for straights
     hold_set = set(hold)
-    if len(hold) == 6 and hold_set == config.full_straight:
-        return config.full_straight_score
-    if len(hold) == 5:
-        if hold_set == config.small_straight:
-            return config.small_straight_score
-        if hold_set == config.large_straight:
-            return config.large_straight_score
+    straight_score = get_straight_score(hold_set)
+    if straight_score and len(hold) in (5, 6) and len(hold_set) == len(hold):
+        return straight_score
 
     # Normal case - proceed with recursive scoring
     cnt = Counter(hold)
@@ -154,20 +217,22 @@ def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     # Check for straights first as special cases
     roll_set = set(roll)
 
-    # Full straight (1-6)
-    if config.full_straight.issubset(roll_set) and n >= 6:
-        straight_dice = tuple(sorted([i for i in range(1, 7)]))
-        holds_dict[straight_dice] = config.full_straight_score
+    # Check if we can form any straights
+    if n >= 5:
+        # Full straight (1-6)
+        if config.full_straight.issubset(roll_set) and n >= 6:
+            straight_dice = tuple(sorted([i for i in range(1, 7)]))
+            holds_dict[straight_dice] = config.full_straight_score
 
-    # Small straight (1-5)
-    if config.small_straight.issubset(roll_set) and n >= 5:
-        straight_dice = tuple(sorted([i for i in range(1, 6)]))
-        holds_dict[straight_dice] = config.small_straight_score
+        # Small straight (1-5)
+        if config.small_straight.issubset(roll_set):
+            straight_dice = tuple(sorted([i for i in range(1, 6)]))
+            holds_dict[straight_dice] = config.small_straight_score
 
-    # Large straight (2-6)
-    if config.large_straight.issubset(roll_set) and n >= 5:
-        straight_dice = tuple(sorted([i for i in range(2, 7)]))
-        holds_dict[straight_dice] = config.large_straight_score
+        # Large straight (2-6)
+        if config.large_straight.issubset(roll_set):
+            straight_dice = tuple(sorted([i for i in range(2, 7)]))
+            holds_dict[straight_dice] = config.large_straight_score
 
     # Optimization: Start with individual scoring dice (1's and 5's) and build up
     holds_to_process = []
@@ -532,8 +597,10 @@ def recommend_move(
                 decision = "score and pass"
                 if bust_prob > 0.4:
                     rationale = f"Banking {new_turn_points} is safer due to high bust chance ({bust_prob:.1%})"
+                elif ev_continue > ev_pass:
+                    rationale = f"Banking {new_turn_points} is marginally better than continuing (EV: {ev_continue:.1f})"
                 else:
-                    rationale = f"Banking {new_turn_points} has better expected value than continuing"
+                    rationale = f"Banking {new_turn_points} has better expected value than continuing (EV: {ev_pass:.1f} vs {ev_continue:.1f})"
 
         # Update best decision if this is better
         if decision == "score and pass":
@@ -548,6 +615,23 @@ def recommend_move(
                 best_hold = hold_dice
                 best_decision = decision
                 best_rationale = rationale
+
+    # Ensure we have a valid rationale
+    if not best_rationale:
+        # Provide a fallback rationale if somehow none was generated
+        if best_decision == "score and pass":
+            total_points = (
+                player_score + current_turn_points + (score_hold(best_hold) or 0)
+            )
+            best_rationale = f"Banking {total_points} points is the best option."
+        else:
+            best_rationale = (
+                f"Continuing with {best_hold} offers the best expected value."
+            )
+
+    # Ensure consistency in rationale formatting
+    if best_rationale and not best_rationale.endswith((".", "!", "?")):
+        best_rationale += "."
 
     return {
         "hold_dice": best_hold,
