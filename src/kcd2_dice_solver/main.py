@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
 import itertools
 import math
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
+from typing import Any, Dict, List, Optional, Tuple
 
 # -------------------------------
 # Game Configuration
@@ -46,64 +44,10 @@ config = GameConfig()
 # -------------------------------
 # Scoring Functions
 # -------------------------------
-def is_scoring_combination(dice: Union[List[int], Counter, Tuple[int, ...]]) -> bool:
-    """
-    Determine if a set of dice contains any scoring combination.
-    Works with either a list of dice, a Counter object, or a tuple.
-
-    Returns:
-        bool: True if the dice contain at least one scoring combination
-    """
-    # Convert to Counter if we received a list or tuple
-    if isinstance(dice, (list, tuple)):
-        dice_counter = Counter(dice)
-    else:
-        dice_counter = dice
-
-    # Check for singles (1's and 5's)
-    if dice_counter[1] > 0 or dice_counter[5] > 0:
-        return True
-
-    # Check for three-of-a-kind or more
-    if any(count >= config.min_of_a_kind for face, count in dice_counter.items()):
-        return True
-
-    # Check for straights
-    dice_set = set(dice_counter.keys())
-    if len(dice_set) >= 5:
-        if config.small_straight.issubset(dice_set) or config.large_straight.issubset(
-            dice_set
-        ):
-            return True
-        if len(dice_set) == 6 and dice_set == config.full_straight:
-            return True
-
-    return False
-
-
 def score_trip(count: int, num: int) -> int:
     """Return score for k-of-a-kind for a given face, where k >= 3."""
     base = 1000 if num == 1 else num * 100
     return base * (2 ** (count - 3))
-
-
-def get_straight_score(dice_set: Set[int]) -> Optional[int]:
-    """
-    Check if the set of dice values forms a straight and return its score.
-
-    Args:
-        dice_set: Set of dice face values
-
-    Returns:
-        int: Score for the straight, or None if not a straight
-    """
-    if config.full_straight.issubset(dice_set):
-        return config.full_straight_score
-    elif config.small_straight.issubset(dice_set):
-        return config.small_straight_score
-    elif config.large_straight.issubset(dice_set):
-        return config.large_straight_score
-    return None
 
 
 def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
@@ -117,9 +61,7 @@ def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
         if cnt[face] > 0:
             for k in range(1, cnt[face] + 1):
                 group = Counter({face: k})
-                score_val = k * (
-                    config.single_one_score if face == 1 else config.single_five_score
-                )
+                score_val = k * (config.single_one_score if face == 1 else config.single_five_score)
                 groups.append((group, score_val))
 
     # For three-or-more of a kind (for any face)
@@ -130,20 +72,17 @@ def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
                 score_val = score_trip(k, face)
                 groups.append((group, score_val))
 
-    # Check for straights
-    dice_set = set(cnt.keys())
-
-    # Full straight (1-6)
+    # Check for 1-2-3-4-5-6 (full straight)
     if len(cnt) == 6 and all(cnt[i] >= 1 for i in range(1, 7)):
         group = Counter({i: 1 for i in range(1, 7)})
         groups.append((group, config.full_straight_score))
 
-    # Small straight (1-5)
+    # Check for 1-2-3-4-5 (small straight)
     if all(cnt.get(i, 0) >= 1 for i in range(1, 6)):
         group = Counter({i: 1 for i in range(1, 6)})
         groups.append((group, config.small_straight_score))
 
-    # Large straight (2-6)
+    # Check for 2-3-4-5-6 (large straight)
     if all(cnt.get(i, 0) >= 1 for i in range(2, 7)):
         group = Counter({i: 1 for i in range(2, 7)})
         groups.append((group, config.large_straight_score))
@@ -155,6 +94,7 @@ def best_score_from_counter(cnt: Counter) -> Optional[int]:
     """
     Given a Counter of dice (the hold), return the maximum score obtainable by partitioning
     the entire multiset into valid scoring groups. If no partition covers all dice, return None.
+    This is the single source of truth for scoring a set of dice.
     """
     if sum(cnt.values()) == 0:
         return 0
@@ -182,129 +122,33 @@ def score_hold(hold: List[int]) -> Optional[int]:
     """
     Given a hold (list of dice), return the maximum score obtainable if the hold is entirely scoring.
     Return None if the hold cannot be partitioned into valid scoring groups.
-
-    This checks first for straight combinations, then falls back to the recursive partitioning algorithm.
+    This function is a wrapper around the recursive best_score_from_counter.
     """
-    # If empty hold, return 0 (base case)
-    if not hold:
-        return 0
-
-    # First check if this is a scoring combination at all
-    if not is_scoring_combination(hold):
-        return None
-
-    # Special case for straights
-    hold_set = set(hold)
-    straight_score = get_straight_score(hold_set)
-    if straight_score and len(hold) in (5, 6) and len(hold_set) == len(hold):
-        return straight_score
-
-    # Normal case - proceed with recursive scoring
     cnt = Counter(hold)
     return best_score_from_counter(cnt)
 
 
 def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     """
-    Generate all valid holds from the roll more efficiently.
-    Uses specialized handling for straights and a more efficient approach
-    for building combinations.
-    Returns a list of tuples: (sorted list of dice in hold, maximum score).
+    Generate all valid holds from a roll by checking every subset.
+    Returns a list of tuples: (sorted list of dice in hold, score).
     """
     n = len(roll)
     holds_dict: Dict[Tuple[int, ...], int] = {}
 
-    # Check for straights first as special cases
-    roll_set = set(roll)
+    # Iterate over all non-empty subsets of the roll
+    for r in range(1, n + 1):
+        for subset_indices in itertools.combinations(range(n), r):
+            subset = [roll[i] for i in subset_indices]
+            sorted_subset_tuple = tuple(sorted(subset))
 
-    # Check if we can form any straights
-    if n >= 5:
-        # Full straight (1-6)
-        if config.full_straight.issubset(roll_set) and n >= 6:
-            straight_dice = tuple(sorted([i for i in range(1, 7)]))
-            holds_dict[straight_dice] = config.full_straight_score
+            # Avoid re-calculating score for a subset we've already processed
+            if sorted_subset_tuple in holds_dict:
+                continue
 
-        # Small straight (1-5)
-        if config.small_straight.issubset(roll_set):
-            straight_dice = tuple(sorted([i for i in range(1, 6)]))
-            holds_dict[straight_dice] = config.small_straight_score
-
-        # Large straight (2-6)
-        if config.large_straight.issubset(roll_set):
-            straight_dice = tuple(sorted([i for i in range(2, 7)]))
-            holds_dict[straight_dice] = config.large_straight_score
-
-    # Optimization: Start with individual scoring dice (1's and 5's) and build up
-    holds_to_process = []
-
-    # Add singles (1's and 5's) first as baseline holds
-    roll_counter = Counter(roll)
-    for face in (1, 5):
-        if roll_counter[face] > 0:
-            for count in range(1, roll_counter[face] + 1):
-                hold = tuple([face] * count)
-                holds_dict[hold] = count * (
-                    config.single_one_score if face == 1 else config.single_five_score
-                )
-                holds_to_process.append(hold)
-
-    # Process each potential triplet (three of a kind)
-    for face in range(1, 7):
-        if roll_counter[face] >= 3:
-            for count in range(3, roll_counter[face] + 1):
-                hold = tuple([face] * count)
-                holds_dict[hold] = score_trip(count, face)
-                holds_to_process.append(hold)
-
-    # For all other combinations - more efficiently build valid scoring combinations
-    # We use the more efficient approach for smaller sets and the traditional approach for larger ones
-    # The threshold of 4 is based on experimentation with typical rolls
-    if n <= 4:
-        # For small dice counts, still use the combinatorial approach
-        for r in range(1, n + 1):
-            for indices in itertools.combinations(range(n), r):
-                subset = [roll[i] for i in indices]
-                # Skip if it's a straight we already handled
-                if len(subset) == 6 and set(subset) == config.full_straight:
-                    continue
-                if len(subset) == 5 and (
-                    set(subset) == config.small_straight
-                    or set(subset) == config.large_straight
-                ):
-                    continue
-
-                sorted_subset = tuple(sorted(subset))
-                if sorted_subset in holds_dict:
-                    continue
-                s = score_hold(list(sorted_subset))
-                if s is not None and s > 0:
-                    holds_dict[sorted_subset] = s
-    else:
-        # For larger dice counts, use a more efficient approach
-        # Combine existing holds and check if they're valid
-        processed_holds = set(holds_dict.keys())
-        while holds_to_process:
-            current_hold = holds_to_process.pop(0)
-            # Try adding other dice from the roll
-            for i in range(n):
-                die = roll[i]
-                # Skip if we've already used this index in the current hold
-                if current_hold.count(die) >= roll_counter[die]:
-                    continue
-
-                # Create a new hold with this die added
-                new_hold = tuple(sorted(current_hold + (die,)))
-
-                # Skip if we've already processed this hold
-                if new_hold in processed_holds:
-                    continue
-
-                # Check if this is a valid scoring hold
-                score_val = score_hold(list(new_hold))
-                if score_val is not None and score_val > 0:
-                    holds_dict[new_hold] = score_val
-                    holds_to_process.append(new_hold)
-                    processed_holds.add(new_hold)
+            score = score_hold(list(sorted_subset_tuple))
+            if score is not None and score > 0:
+                holds_dict[sorted_subset_tuple] = score
 
     # Convert to list of (list, score)
     return [(list(k), v) for k, v in holds_dict.items()]
@@ -329,9 +173,7 @@ def outcome_is_scoring(outcome: Tuple[int, ...]) -> bool:
     # Check for straights
     outcome_set = set(outcome)
     if len(outcome) >= 5:
-        if config.small_straight.issubset(
-            outcome_set
-        ) or config.large_straight.issubset(outcome_set):
+        if config.small_straight.issubset(outcome_set) or config.large_straight.issubset(outcome_set):
             return True
     if len(outcome) == 6 and outcome_set == config.full_straight:
         return True
@@ -349,9 +191,10 @@ def compute_bust_probability(n: int) -> float:
         return 0.0  # No dice can't bust
 
     # We can cache these values since they're static for a given dice count
+    # Calculated based on standard scoring rules.
     bust_probabilities = {
-        1: 2 / 3,  # Only 1 and 5 score (2 out of 6 faces), so bust on 2,3,4,6
-        2: 4 / 9,  # 1-(1-(2/3)²) = 4/9
+        1: 4 / 6,  # Bust on 2,3,4,6
+        2: 16 / 36,  # (4/6)^2
         3: 0.1667,  # Pre-calculated, approx 1/6
         4: 0.0770,  # Pre-calculated
         5: 0.0309,  # Pre-calculated
@@ -364,11 +207,7 @@ def compute_bust_probability(n: int) -> float:
 
     # Calculate if not cached (fallback for non-standard dice counts)
     total = 6**n
-    bust = sum(
-        1
-        for outcome in itertools.product(range(1, 7), repeat=n)
-        if not outcome_is_scoring(outcome)
-    )
+    bust = sum(1 for outcome in itertools.product(range(1, 7), repeat=n) if not outcome_is_scoring(outcome))
     return bust / total if total > 0 else 0.0
 
 
@@ -377,9 +216,10 @@ def average_score(n: int) -> float:
     Calculate the expected score from rolling n dice.
     Uses cached values for common dice counts to improve performance.
     """
-    # Pre-calculated expected values for common dice counts
+    # Pre-calculated expected values for common dice counts.
+    # These depend on the scoring rules and optimal holding strategy.
     avg_scores = {
-        1: 25.0,  # (100 + 50)/6 = 25
+        1: 25.0,  # (100 + 50)/6
         2: 59.7,  # Pre-calculated
         3: 130.3,  # Pre-calculated
         4: 212.5,  # Pre-calculated
@@ -414,88 +254,6 @@ def average_score(n: int) -> float:
 
 
 # -------------------------------
-# Expected Value Function (with risk adjustment)
-# -------------------------------
-def expected_value(
-    remaining_dice: int,
-    current_turn_points: int,
-    player_score: int,
-    opponent_score: int,
-    depth: int = 0,
-    target_score: int = None,
-) -> float:
-    """
-    Calculate expected value of continuing with current turn.
-    Enhanced to account for end-game strategy and target score proximity.
-
-    Args:
-        remaining_dice: Number of dice left to roll
-        current_turn_points: Points accumulated in current turn
-        player_score: Total score of the player
-        opponent_score: Total score of the opponent
-        depth: Current recursion depth
-        target_score: Target score to win (if known)
-
-    Returns:
-        Expected value of continuing the turn
-    """
-    if remaining_dice == 0:
-        remaining_dice = config.hot_dice_count  # Hot-dice rule.
-
-    bust_prob = compute_bust_probability(remaining_dice)
-    safe_points = player_score + current_turn_points
-
-    # End-game strategy adjustments
-    if target_score is not None:
-        points_needed = target_score - player_score
-
-        # If we can win by stopping, always stop
-        if current_turn_points >= points_needed:
-            return current_turn_points  # Just bank and win
-
-        # If we're very close to winning, be more aggressive
-        if points_needed - current_turn_points < 300:
-            # Increase risk taking when close to winning
-            risk_factor = 1.2
-        else:
-            risk_factor = 1.0
-    else:
-        risk_factor = 1.0
-
-    # Additional risk adjustment based on relative scores
-    if player_score < opponent_score:
-        # Being behind increases willingness to take risks
-        risk_factor *= config.risk_bonus
-    elif player_score > opponent_score:
-        # Being ahead decreases willingness to take risks
-        risk_factor *= config.risk_penalty
-
-    # For high dice counts or deep recursion, use average
-    if remaining_dice <= 2 or depth >= config.ev_max_depth:
-        avg_score = average_score(remaining_dice)
-        # Apply risk factor to expected continuation value
-        ev_continue = current_turn_points + (1 - bust_prob) * avg_score * risk_factor
-    else:
-        # More precise calculation with recursion
-        avg_score = average_score(remaining_dice)
-        future_ev = config.ev_discount * expected_value(
-            remaining_dice - 1,  # Assume we'll use at least one die
-            current_turn_points + avg_score,
-            player_score,
-            opponent_score,
-            depth + 1,
-            target_score,
-        )
-        ev_continue = (
-            current_turn_points
-            + (1 - bust_prob) * (avg_score + future_ev) * risk_factor
-        )
-
-    # Decision point: is it better to bank or continue?
-    return max(current_turn_points, ev_continue)
-
-
-# -------------------------------
 # Recommendation Function
 # -------------------------------
 def recommend_move(
@@ -526,11 +284,7 @@ def recommend_move(
     holds = generate_holds(current_roll)
 
     if not holds:
-        return {
-            "hold_dice": [],
-            "decision": "bust",
-            "rationale": "No scoring combinations possible.",
-        }
+        return {"hold_dice": [], "decision": "bust", "rationale": "No scoring combinations possible."}
 
     best_decision = "score and pass"
     best_ev = current_turn_points  # Default: banking current points
@@ -559,10 +313,7 @@ def recommend_move(
 
         # Special case: if using all dice (hot dice), be more aggressive
         hot_dice_bonus = (
-            1.1
-            if dice_left_after_hold == config.hot_dice_count
-            and len(hold_dice) == remaining_dice
-            else 1.0
+            1.1 if dice_left_after_hold == config.hot_dice_count and len(hold_dice) == remaining_dice else 1.0
         )
 
         # End-game considerations
@@ -575,9 +326,7 @@ def recommend_move(
         else:
             # Calculate expected values
             avg_future_score = average_score(dice_left_after_hold)
-            ev_continue = (
-                new_turn_points + (1 - bust_prob) * avg_future_score * hot_dice_bonus
-            )
+            ev_continue = new_turn_points + (1 - bust_prob) * avg_future_score * hot_dice_bonus
             ev_pass = new_turn_points
 
             # Consider devil dice (not implemented in core logic yet)
@@ -591,16 +340,14 @@ def recommend_move(
                 rationale = (
                     f"Hold {hold_dice} scoring {hold_score} points; "
                     f"with {dice_left_after_hold} dice remaining, bust chance is "
-                    f"{bust_prob * 100:.1f}%, continuing EV: {ev_continue:.1f} vs banking: {ev_pass}"
+                    f"{bust_prob*100:.1f}%, continuing EV: {ev_continue:.1f} vs banking: {ev_pass}"
                 )
             else:
                 decision = "score and pass"
                 if bust_prob > 0.4:
                     rationale = f"Banking {new_turn_points} is safer due to high bust chance ({bust_prob:.1%})"
-                elif ev_continue > ev_pass:
-                    rationale = f"Banking {new_turn_points} is marginally better than continuing (EV: {ev_continue:.1f})"
                 else:
-                    rationale = f"Banking {new_turn_points} has better expected value than continuing (EV: {ev_pass:.1f} vs {ev_continue:.1f})"
+                    rationale = f"Banking {new_turn_points} has better expected value than continuing"
 
         # Update best decision if this is better
         if decision == "score and pass":
@@ -616,28 +363,7 @@ def recommend_move(
                 best_decision = decision
                 best_rationale = rationale
 
-    # Ensure we have a valid rationale
-    if not best_rationale:
-        # Provide a fallback rationale if somehow none was generated
-        if best_decision == "score and pass":
-            total_points = (
-                player_score + current_turn_points + (score_hold(best_hold) or 0)
-            )
-            best_rationale = f"Banking {total_points} points is the best option."
-        else:
-            best_rationale = (
-                f"Continuing with {best_hold} offers the best expected value."
-            )
-
-    # Ensure consistency in rationale formatting
-    if best_rationale and not best_rationale.endswith((".", "!", "?")):
-        best_rationale += "."
-
-    return {
-        "hold_dice": best_hold,
-        "decision": best_decision,
-        "rationale": best_rationale,
-    }
+    return {"hold_dice": best_hold, "decision": best_decision, "rationale": best_rationale}
 
 
 # -------------------------------
@@ -724,9 +450,7 @@ def interactive_solver() -> None:
 
                 # Validate number of dice
                 if len(dice_values) != remaining_dice:
-                    print(
-                        f"Error: You must enter exactly {remaining_dice} dice values."
-                    )
+                    print(f"Error: You must enter exactly {remaining_dice} dice values.")
                     continue
 
                 # Validate dice values
@@ -742,21 +466,15 @@ def interactive_solver() -> None:
 
                 # Validate devil count
                 try:
-                    devil_count_input = input(
-                        "Enter number of Devil's Head dice (if any, else 0): "
-                    ).strip()
+                    devil_count_input = input("Enter number of Devil's Head dice (if any, else 0): ").strip()
 
                     if not devil_count_input.isdigit():
-                        print(
-                            "Error: Devil's Head count must be a non-negative integer."
-                        )
+                        print("Error: Devil's Head count must be a non-negative integer.")
                         continue
 
                     devil_count = int(devil_count_input)
                     if devil_count < 0 or devil_count > remaining_dice:
-                        print(
-                            f"Error: Devil's Head count must be between 0 and {remaining_dice}."
-                        )
+                        print(f"Error: Devil's Head count must be between 0 and {remaining_dice}.")
                         continue
                 except ValueError:
                     print("Error: Devil's Head count must be an integer.")
@@ -779,15 +497,15 @@ def interactive_solver() -> None:
 
                 # Validate holding logic
                 if not set(rec["hold_dice"]).issubset(set(current_roll)):
-                    print(
-                        "Internal error: Recommended hold contains dice not in the roll!"
-                    )
+                    print("Internal error: Recommended hold contains dice not in the roll!")
                     continue
 
                 hold_score = score_hold(rec["hold_dice"]) or 0
 
                 # Make sure hold score is valid
                 if hold_score is None or hold_score <= 0:
+                    # This case should not be reachable if holds are generated correctly.
+                    # It means recommend_move returned a non-scoring hold.
                     print("Internal error: Invalid holding score calculation!")
                     continue
 
@@ -808,9 +526,7 @@ def interactive_solver() -> None:
                 }
                 round_log["turns"].append(turn_log)
 
-                print(
-                    f"\nSolver recommends: {rec['decision']} with dice {rec['hold_dice']}"
-                )
+                print(f"\nSolver recommends: {rec['decision']} with dice {rec['hold_dice']}")
                 print(f"Rationale: {rec['rationale']}")
 
                 if rec["decision"] == "score and pass":
@@ -821,9 +537,7 @@ def interactive_solver() -> None:
                     current_turn_points = 0
                     round_over = True
                 else:
-                    print(
-                        f"Continuing turn, current points: {current_turn_points}, dice left: {remaining_dice}"
-                    )
+                    print(f"Continuing turn, current points: {current_turn_points}, dice left: {remaining_dice}")
 
             except KeyboardInterrupt:
                 print("\nGame interrupted.")
