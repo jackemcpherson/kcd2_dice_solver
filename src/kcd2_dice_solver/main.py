@@ -131,7 +131,7 @@ def valid_groups_from_count(cnt: Counter) -> List[Tuple[Counter, int]]:
                 groups.append((group, score_val))
 
     # Check for straights
-    dice_set = set(cnt.keys())
+    set(cnt.keys())
 
     # Full straight (1-6)
     if len(cnt) == 6 and all(cnt[i] >= 1 for i in range(1, 7)):
@@ -221,17 +221,17 @@ def generate_holds(roll: List[int]) -> List[Tuple[List[int], int]]:
     if n >= 5:
         # Full straight (1-6)
         if config.full_straight.issubset(roll_set) and n >= 6:
-            straight_dice = tuple(sorted([i for i in range(1, 7)]))
+            straight_dice = tuple(sorted(list(range(1, 7))))
             holds_dict[straight_dice] = config.full_straight_score
 
         # Small straight (1-5)
         if config.small_straight.issubset(roll_set):
-            straight_dice = tuple(sorted([i for i in range(1, 6)]))
+            straight_dice = tuple(sorted(list(range(1, 6))))
             holds_dict[straight_dice] = config.small_straight_score
 
         # Large straight (2-6)
         if config.large_straight.issubset(roll_set):
-            straight_dice = tuple(sorted([i for i in range(2, 7)]))
+            straight_dice = tuple(sorted(list(range(2, 7))))
             holds_dict[straight_dice] = config.large_straight_score
 
     # Optimization: Start with individual scoring dice (1's and 5's) and build up
@@ -443,7 +443,7 @@ def expected_value(
         remaining_dice = config.hot_dice_count  # Hot-dice rule.
 
     bust_prob = compute_bust_probability(remaining_dice)
-    safe_points = player_score + current_turn_points
+    player_score + current_turn_points
 
     # End-game strategy adjustments
     if target_score is not None:
